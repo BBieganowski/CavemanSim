@@ -41,8 +41,9 @@ class Caveman():
             self.die_hunger()
 
         self.age += 1
-        if self.age > 60:
-            self.die_old()
+        if self.age > 50:
+            if np.random.uniform(0, 1) < 0.2:
+                self.die_old()
 
         self.prowess = self.base_prowess - self.hunger
 

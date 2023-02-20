@@ -21,13 +21,16 @@ class Jungle():
         # and is equal to the food supply multiplied by the number of cavemen in the jungle
         self.current_food = int(self.food_supply * len(self.population))
 
-        # Food satisfaction function is a function that takes in the amount of food eaten
-        # and returns the amount of hunger removed, its fair to assume it to be concave
-        self.food_satifsaction_function = lambda x: 2 * np.sqrt(x) / 0.02
+        # Food in belly vs hunger function is a function that takes amount of food currently in the belly
+        # of a caveman and returns the amount of hunger that the caveman has
+        # Useful for sharing and consumption calculation
+        self.fib_hunger_function = lambda x: 100*(x-1)**2
 
-        # Inverse food satisfaction function is the inverse of the food satisfaction function
-        # and is used to calculate the amount of food eaten given the amount of hunger removed
-        self.inverse_food_satifsaction_function = lambda x: (x * 0.02)**2 / 2
+
+        # Hunger vs food in belly function is a function that takes the amount of hunger that a caveman has
+        # and returns the amount of food in the belly of the caveman
+        # Useful for updating the hunger of a caveman
+        self.hunger_fib_function = lambda x: 1 - np.sqrt(x/100)
 
         # Year is the current year of the simulation
         self.year = 1
@@ -37,7 +40,7 @@ class Jungle():
         self.relationships_grid = np.zeros((len(self.population), len(self.population)))
 
         # Each year, each couple has a 30% chance of having a baby
-        self.reproduction_rate = 0.7
+        self.reproduction_rate = 0.3
 
         # Couples is a list of tuples that stores the families in the jungle
         self.couples = []
@@ -50,7 +53,13 @@ class Jungle():
                            "Singles":[],
                            "Taken":[],
                            "Hunger Deaths":[],
-                           "Old Age Deaths": []}
+                           "Old Age Deaths": [],
+                           "Average Age":[],
+                           "Average Hunger":[],
+                           "Average Prowess":[],
+                            "Average Selfishness":[],
+                            "Average Reciprocity":[],
+                           }
         
 
         self.old_age_deaths = 0
@@ -119,9 +128,9 @@ class Jungle():
             idx = caveman.id
             eaten = pops.loc[idx, 'food_eaten']
 
-            caveman.hunger -= self.food_satifsaction_function(eaten)
+            caveman.hunger = self.hunger_level_update(caveman.hunger, eaten)
             caveman.hunger = max(caveman.hunger, 0)
-            print(f"Caveman {caveman.name} ({caveman.sex}) ate {eaten:.2f} food and is now at hunger {caveman.hunger:.2f} (-{self.food_satifsaction_function(eaten):.2f}).")
+            print(f"Caveman {caveman.name} ({caveman.sex}) ate {eaten:.2f} food and is now at hunger {caveman.hunger:.2f}.")
 
             # Update global food to share
             to_share = pops.loc[idx, 'food_to_share']
@@ -137,8 +146,12 @@ class Jungle():
                 # rank the other cavemen by their relationship with this caveman
                 # and share food with the one with the highest relationship
                 relationship_ranking = np.argsort(relationships)
+
+
+                max_sharings = min(len(relationship_ranking), np.inf)
+
                 # Iterate through the cavemen in order of relationship
-                for i in range(len(relationship_ranking)):
+                for i in range(max_sharings):
                     other_caveman_id = relationship_ranking[i]
                     
                     # Don't share with dead cavemen
@@ -155,14 +168,20 @@ class Jungle():
                     # If the other caveman has hunger and this caveman has food to
                     # share, share food
                     if other_caveman.hunger > 0 and caveman.food_to_share > 0:
-                        food_to_remove_hunger = self.inverse_food_satifsaction_function(other_caveman.hunger)
+                        food_to_remove_hunger = self.food_to_remove_hunger(other_caveman.hunger)
                         food_shared = min(food_to_remove_hunger, caveman.food_to_share)
                         caveman.food_to_share -= food_shared
-                        other_caveman.hunger -= self.food_satifsaction_function(food_shared)
+                        
+                        self.relationships_grid[caveman.id, other_caveman.id] += self.relationship_level_update(other_caveman.hunger, food_shared)
+
+                        other_caveman.hunger = self.hunger_level_update(other_caveman.hunger, food_shared)
                         other_caveman.hunger = max(other_caveman.hunger, 0)
-                        self.relationships_grid[caveman.id, other_caveman.id] += self.food_satifsaction_function(food_shared)
+                        
                         print(f"\nCaveman {caveman.name} ({caveman.sex}) shared {food_shared:.2f} food with caveman {other_caveman.name} ({other_caveman.sex}) and {other_caveman.name} now at hunger {other_caveman.hunger:.2f}.")
                         print(f"Relationship between {caveman.name} and {other_caveman.name} is now {self.relationships_grid[caveman.id, other_caveman.id]:.2f}.")
+                
+                    if caveman.food_to_share == 0:
+                        break
                 break
                         
     def social_stage(self):
@@ -239,6 +258,22 @@ class Jungle():
         current_old_deahts = self.old_age_deaths
         current_hunger_deaths = self.hunger_deaths
 
+        # Get average age
+        average_age = np.mean([caveman.age for caveman in self.population])
+
+        # Get average hunger
+        average_hunger = np.mean([caveman.hunger for caveman in self.population])
+
+        # Get average prowess
+        average_prowess = np.mean([caveman.prowess for caveman in self.population])
+
+        # Get average selfishness
+        average_selfishness = np.mean([caveman.selfishness for caveman in self.population])
+
+        # Get average reciprocity
+        average_reciprocity = np.mean([caveman.reciprocity for caveman in self.population])
+
+
         self.statistics['Population'].append(population)
         self.statistics['Adults'].append(adults)
         self.statistics['Children'].append(children)
@@ -249,12 +284,35 @@ class Jungle():
         self.statistics['Hunger Deaths'].append(current_old_deahts)
         self.statistics['Old Age Deaths'].append(current_hunger_deaths)
 
+        self.statistics['Average Age'].append(average_age)
+        self.statistics['Average Hunger'].append(average_hunger)
+        self.statistics['Average Prowess'].append(average_prowess)
+        self.statistics['Average Selfishness'].append(average_selfishness)
+        self.statistics['Average Reciprocity'].append(average_reciprocity)
+
     def add_caveman(self, id, age, selfishness, base_prowess):
 
         # Add a new caveman to the jungle
         self.population.append(Caveman(self.max_id, age=age, selfishness=selfishness, base_prowess=base_prowess))
         self.max_id += 1
         self.relationships_grid = np.pad(self.relationships_grid, ((0, 1), (0, 1)), 'constant')
+
+    def food_to_remove_hunger(self, hunger):
+        current_fib = self.hunger_fib_function(hunger)
+        return 1-current_fib
+    
+    def hunger_level_update(self, initial_hunger, food_eaten):
+        # Update hunger level
+        current_fib = self.hunger_fib_function(initial_hunger)
+        new_fib = current_fib + food_eaten
+        return self.fib_hunger_function(new_fib)
+
+    def relationship_level_update(self, initial_hunger, food_shared):
+        # Update hunger level
+        current_fib = self.hunger_fib_function(initial_hunger)
+        new_fib = current_fib + food_shared
+        new_hunger = self.fib_hunger_function(new_fib)
+        return -(new_hunger - initial_hunger)
 
     def get_caveman_by_id(self, id):
         return [caveman for caveman in self.population if caveman.id == id][0]
