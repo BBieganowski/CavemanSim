@@ -39,8 +39,9 @@ class Jungle():
         # The value at index (i, j) is the relationship between caveman i and caveman j
         self.relationships_grid = np.zeros((len(self.population), len(self.population)))
 
-        # Each year, each couple has a 30% chance of having a baby
-        self.reproduction_rate = 0.3
+        # Each year, each couple has a x% chance of having a baby
+        # Initially set at zero, updated each year based on global hunger level.
+        self.reproduction_rate = 0.0
 
         # Couples is a list of tuples that stores the families in the jungle
         self.couples = []
@@ -215,6 +216,13 @@ class Jungle():
 
     def reproduction_stage(self):
         print("\n#### REPRODUCTION STAGE ####")
+        
+        # Updating reproduction rate based on global hunger level
+        average_hunger = np.mean([caveman.hunger for caveman in self.population])
+        self.reproduction_rate = (-0.01*average_hunger) + 0.5
+        print(f"Average hunger is {average_hunger:.2f} and reproduction rate is {self.reproduction_rate:.2f}.")
+
+        # Reproduction itself
         for i in self.couples:
 
             try:
